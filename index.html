@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>魔术模拟器</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: radial-gradient(circle at 50% 0%, #1b2333, #070a10 70%);
+    color: #e8eefc;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    display: flex;
+    justify-content: center;
+    padding: 26px 14px 70px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .wrap { width: 100%; max-width: 700px; text-align: center; }
+
+  /* 标题行 */
+  .header {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    margin-bottom: 18px;
+  }
+  h1 {
+    font-size: 26px; margin: 0; letter-spacing: 4px;
+    background: linear-gradient(90deg, #ffd76e, #f0a94a 60%, #ffd76e);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  #toggleBtn {
+    position: absolute; right: 0; top: 50%;
+    transform: translateY(-50%);
+    font-size: 12px; padding: 6px 14px;
+  }
+
+  /* 说明性文字区（可隐藏） */
+  #textTop { transition: .2s; }
+
+  .steps { display: flex; justify-content: center; gap: 5px; margin-bottom: 12px; flex-wrap: wrap; }
+  .step {
+    font-size: 11px; padding: 5px 10px; border-radius: 999px;
+    background: rgba(255,255,255,.04); color: #6b7893;
+    border: 1px solid rgba(255,255,255,.07);
+    transition: .3s; white-space: nowrap;
+  }
+  .step.active {
+    background: linear-gradient(135deg, #3b6bff, #7a4dff);
+    color: #fff; border-color: transparent;
+    box-shadow: 0 0 15px rgba(90,110,255,.5);
+  }
+  .step.done { color: #7fe3a4; border-color: rgba(127,227,164,.28); }
+
+  .mode-bar { display: flex; justify-content: center; gap: 8px; margin-bottom: 10px; }
+  .mode-tag {
+    padding: 5px 16px; border-radius: 999px; font-size: 12px;
+    cursor: pointer; background: rgba(255,255,255,.05);
+    border: 1px solid rgba(255,255,255,.1); color: #8a96b0;
+    transition: .3s; user-select: none;
+  }
+  .mode-tag.active {
+    background: linear-gradient(135deg, #3b6bff, #7a4dff);
+    color: #fff; border-color: transparent;
+    box-shadow: 0 0 13px rgba(90,110,255,.5);
+  }
+
+  .status {
+    min-height: 44px; display: flex; align-items: center; justify-content: center;
+    padding: 9px 16px; margin-bottom: 14px;
+    border-radius: 12px; font-size: 14px; line-height: 1.5;
+    background: rgba(255,255,255,.045);
+    border: 1px solid rgba(255,255,255,.07);
+    transition: .3s;
+  }
+
+  /* 牌桌 —— 52张：桌面13列×4行 */
+  .table {
+    display: grid;
+    grid-template-columns: repeat(13, 42px);
+    gap: 5px;
+    justify-content: center;
+    padding: 14px 10px;
+    background: radial-gradient(circle at 50% 25%, rgba(28,120,82,.45), rgba(6,36,26,.92) 75%);
+    border: 1px solid rgba(120,255,190,.12);
+    border-radius: 16px;
+    box-shadow: inset 0 6px 30px rgba(0,0,0,.55), 0 18px 36px -20px rgba(0,0,0,.9);
+    margin-bottom: 16px;
+    min-height: 180px;
+  }
+  @media (max-width: 640px) {
+    .table { grid-template-columns: repeat(7, 44px); gap: 4px; padding: 10px 6px; }
+  }
+
+  /* 卡牌 */
+  .card {
+    width: 42px; height: 63px;
+    perspective: 700px;
+    cursor: pointer;
+    transition: transform .3s ease;
+    position: relative;
+  }
+  @media (max-width: 640px) { .card { width: 44px; height: 66px; } }
+  .card:not(.picked):hover { transform: translateY(-4px); }
+  .card.picked { transform: translateY(-10px) scale(1.14); z-index: 10; }
+  .card.correct {
+    border-radius: 5px;
+    box-shadow: 0 0 0 3px #38d97a, 0 0 22px rgba(56,217,122,.7);
+  }
+  .card.wrong { opacity: .28; }
+
+  .card-inner {
+    position: relative; width: 100%; height: 100%;
+    transform-style: preserve-3d;
+    transition: transform .55s cubic-bezier(.4,.2,.2,1);
+  }
+  .card.flipped .card-inner { transform: rotateY(180deg); }
+
+  .card-face {
+    position: absolute; inset: 0;
+    border-radius: 4px;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    overflow: hidden;
+  }
+  .card-back {
+    background: repeating-linear-gradient(45deg, #1c3a8c 0 5px, #244bb0 5px 10px);
+    border: 1px solid #0d1b45;
+    box-shadow: inset 0 0 0 2px rgba(255,255,255,.14);
+  }
+  .card-front {
+    background: linear-gradient(160deg, #ffffff, #eeeef2);
+    border: 1px solid #d8d8de;
+    transform: rotateY(180deg);
+    color: #14161c;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 1px;
+  }
+  .card-front.red { color: #d3243a; }
+  .card-front .fc-rank { font-size: 12px; font-weight: 800; line-height: 1; }
+  .card-front .fc-suit { font-size: 12px; line-height: 1; }
+
+  /* 功能按键区 —— 始终可见 */
+  .controls {
+    display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;
+    min-height: 46px; margin-bottom: 6px;
+  }
+  .btn {
+    appearance: none; font-family: inherit;
+    border: 1px solid rgba(255,255,255,.12);
+    background: rgba(255,255,255,.06);
+    color: #dbe4f7; padding: 10px 22px;
+    border-radius: 10px; font-size: 15px;
+    cursor: pointer; transition: .25s;
+  }
+  .btn:hover { background: rgba(255,255,255,.13); transform: translateY(-1px); }
+  .btn.primary {
+    background: linear-gradient(135deg, #3b6bff, #7a4dff);
+    border-color: transparent; color: #fff;
+    box-shadow: 0 8px 22px -8px rgba(90,110,255,.9);
+  }
+  .btn.primary:hover { box-shadow: 0 12px 26px -8px rgba(90,110,255,1); }
+  .btn:disabled { opacity: .4; cursor: default; transform: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- 标题（始终显示） + 显示/隐藏说明文字切换 -->
+  <div class="header">
+    <h1>🎩 魔术模拟器</h1>
+    <button class="btn" id="toggleBtn">显示</button>
+  </div>
+
+  <!-- 说明性文字（可隐藏）：步骤条 / 模式标签 / 状态提示 -->
+  <div id="textTop" style="display:none">
+    <div class="steps" id="steps">
+      <div class="step">1 · 洗牌</div>
+      <div class="step">2 · A 随机抽</div>
+      <div class="step">3 · B 抽黑桃K</div>
+      <div class="step">4 · 观众看牌</div>
+      <div class="step">5 · 猜牌</div>
+    </div>
+
+    <div class="mode-bar">
+      <span class="mode-tag active" id="tagA">A · 明面随机</span>
+      <span class="mode-tag" id="tagB">B · 隐藏黑桃K</span>
+    </div>
+
+    <div class="status" id="status">点击下方「洗牌」开始</div>
+  </div>
+
+  <!-- 牌桌：始终显示 -->
+  <div class="table" id="table"></div>
+
+  <!-- 功能按键：始终显示 -->
+  <div class="controls" id="controls"></div>
+</div>
+
+<script>
+/* ============================================================
+   数据：标准52张（无大小王）
+   ============================================================ */
+const SUITS = ['♠', '♥', '♦', '♣'];
+const RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+const DECK = [];
+for (const s of SUITS) for (const r of RANKS) DECK.push({ suit: s, rank: r, red: s === '♥' || s === '♦' });
+
+const TARGET_INDEX = DECK.findIndex(c => c.suit === '♠' && c.rank === 'K');
+
+const tableEl    = document.getElementById('table');
+const statusEl   = document.getElementById('status');
+const controlsEl = document.getElementById('controls');
+const stepsEl    = document.getElementById('steps');
+const tagA       = document.getElementById('tagA');
+const tagB       = document.getElementById('tagB');
+const textTop    = document.getElementById('textTop');
+const toggleBtn  = document.getElementById('toggleBtn');
+
+/* 状态
+   idle       初始
+   shuffling  洗牌动画
+   shuffled   A就绪
+   showingA   A已抽出一张（明面展示中，可返回）
+   readyB     B就绪
+   drawingB   B抽牌动画
+   drawnB     黑桃K已给观众看
+   guessing   猜牌环节
+   done       猜中
+*/
+let state = 'idle';
+let cardEls = [];
+let displayOrder = [];
+let aPickedEl = null;
+let textVisible = false;
+
+/* ============================================================
+   显示 / 隐藏：只隐藏说明性文字，功能按键始终保留
+   ============================================================ */
+function setTextVisible(v) {
+  textVisible = v;
+  textTop.style.display = v ? 'block' : 'none';
+  toggleBtn.textContent = v ? '隐藏' : '显示';
+}
+toggleBtn.addEventListener('click', () => setTextVisible(!textVisible));
+
+/* ============================================================
+   渲染工具
+   ============================================================ */
+function cardFaceHTML(card) {
+  return `<div class="card-face card-front ${card.red ? 'red' : ''}">
+            <span class="fc-rank">${card.rank}</span>
+            <span class="fc-suit">${card.suit}</span>
+          </div>`;
+}
+
+function renderTable(order, faceUp = false) {
+  tableEl.innerHTML = '';
+  cardEls = [];
+  displayOrder = order.slice();
+
+  order.forEach((deckIdx) => {
+    const card = DECK[deckIdx];
+    const el = document.createElement('div');
+    el.className = 'card' + (faceUp ? ' flipped' : '');
+    el.dataset.deckIdx = deckIdx;
+    el.innerHTML = `
+      <div class="card-inner">
+        <div class="card-face card-back"></div>
+        ${cardFaceHTML(card)}
+      </div>`;
+    tableEl.appendChild(el);
+    cardEls.push(el);
+  });
+}
+
+function getElByDeckIdx(deckIdx) {
+  return cardEls.find(el => Number(el.dataset.deckIdx) === deckIdx);
+}
+
+/* ============================================================
+   步骤 / 模式 / 状态
+   ============================================================ */
+function setStep(n) {
+  [...stepsEl.children].forEach((el, i) => {
+    const idx = i + 1;
+    el.classList.toggle('active', idx === n);
+    el.classList.toggle('done', idx < n);
+  });
+}
+function setModeTag(m) {
+  tagA.classList.toggle('active', m === 'A');
+  tagB.classList.toggle('active', m === 'B');
+}
+function setStatus(t) { statusEl.textContent = t; }
+
+/* ============================================================
+   功能按键（始终显示，仅按钮文字变化）
+   ============================================================ */
+function renderControls() {
+  controlsEl.innerHTML = '';
+  const add = (label, cls, fn) => {
+    const b = document.createElement('button');
+    b.className = 'btn ' + (cls || '');
+    b.textContent = label;
+    b.addEventListener('click', fn);
+    controlsEl.appendChild(b);
+  };
+
+  switch (state) {
+    case 'idle':
+      add('🔀 洗牌', 'primary', doShuffle); break;
+    case 'shuffled':
+      add('抽', 'primary', drawA); break;
+    case 'showingA':
+      add('↩ 返回', '', backToA);
+      add('继续 →', 'primary', continueToB);
+      break;
+    case 'readyB':
+      add('抽', 'primary', drawB); break;
+    case 'drawnB':
+      add('继续 →', 'primary', enterGuessing); break;   // ← 由“我记住了”改为“继续”
+    case 'guessing':
+      add('↺ 重新开始', '', reset); break;
+    case 'done':
+      add('🔁 再变一次', 'primary', reset); break;
+  }
+}
+
+/* ============================================================
+   1. 洗牌
+   ============================================================ */
+function doShuffle() {
+  if (state !== 'idle') return;
+  state = 'shuffling';
+  aPickedEl = null;
+  setStep(1);
+  setModeTag('A');
+  setStatus('🔄 洗牌中……');
+  controlsEl.innerHTML = '';
+
+  const order = DECK.map((_, i) => i);
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  renderTable(order, false);
+
+  cardEls.forEach((el, i) => {
+    const dx  = (Math.random() - 0.5) * 70;
+    const dy  = (Math.random() - 0.5) * 34;
+    const rot = (Math.random() - 0.5) * 40;
+    setTimeout(() => {
+      el.style.transition = 'transform .25s ease-out';
+      el.style.transform = `translate(${dx}px, ${dy}px) rotate(${rot}deg)`;
+    }, i * 20);
+    setTimeout(() => {
+      el.style.transform = 'translate(0,0) rotate(0deg)';
+    }, 520 + i * 20);
+  });
+
+  setTimeout(() => {
+    cardEls.forEach(el => { el.style.transition = ''; el.style.transform = ''; });
+    state = 'shuffled';
+    setStep(2);
+    setModeTag('A');
+    setStatus('A模式 · 点击「抽」，随机抽出一张明面牌');
+    renderControls();
+  }, 1400);
+}
+
+/* ============================================================
+   2. A 模式：随机明面抽牌（排除黑桃K），抽完停留可返回
+   ============================================================ */
+function drawA() {
+  if (state !== 'shuffled') return;
+  state = 'showingA';
+  controlsEl.innerHTML = '';
+
+  const candidates = displayOrder.filter(i => i !== TARGET_INDEX);
+  const randomDeckIdx = candidates[Math.floor(Math.random() * candidates.length)];
+  const el = getElByDeckIdx(randomDeckIdx);
+  const card = DECK[randomDeckIdx];
+  aPickedEl = el;
+
+  el.classList.add('flipped', 'picked');
+  setStatus(`A模式 · 随机抽到了 ${card.rank}${card.suit}（明面展示）`);
+  renderControls();
+}
+
+/* A 抽完 → 返回：盖回牌，重新 A 抽 */
+function backToA() {
+  if (aPickedEl) aPickedEl.classList.remove('flipped', 'picked');
+  aPickedEl = null;
+  state = 'shuffled';
+  setStep(2);
+  setModeTag('A');
+  setStatus('A模式 · 点击「抽」，随机抽出一张明面牌');
+  renderControls();
+}
+
+/* A 抽完 → 继续：进入 B 模式 */
+function continueToB() {
+  if (aPickedEl) aPickedEl.classList.remove('flipped', 'picked');
+  aPickedEl = null;
+  state = 'readyB';
+  setStep(3);
+  setModeTag('B');
+  setStatus('B模式 · 点击「抽」，从牌堆中抽出黑桃K（牌面隐藏）');
+  renderControls();
+}
+
+/* ============================================================
+   3. B 模式：抽出黑桃K（背面 → 翻开）
+   ============================================================ */
+function drawB() {
+  if (state !== 'readyB') return;
+  state = 'drawingB';
+  controlsEl.innerHTML = '';
+
+  const el = getElByDeckIdx(TARGET_INDEX);
+  el.classList.add('picked');
+  setStatus('B模式 · 从牌堆中抽出这一张……');
+
+  setTimeout(() => {
+    el.classList.add('flipped');
+    state = 'drawnB';
+    setStep(4);
+    setStatus('👀 请观众自己看这张牌并记住，不要给魔术师任何提示');
+    renderControls();
+  }, 520);
+}
+
+/* ============================================================
+   4. 观众看完 → 猜牌
+   ============================================================ */
+function enterGuessing() {
+  if (state !== 'drawnB') return;
+  state = 'guessing';
+  setStep(5);
+
+  const targetEl = getElByDeckIdx(TARGET_INDEX);
+  if (targetEl) targetEl.classList.remove('flipped', 'picked');
+
+  const order = DECK.map((_, i) => i);
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+
+  renderTable(order, true);
+  setStatus('🔍 52张牌已展示，请魔术师点击选中黑桃K');
+
+  cardEls.forEach(el => el.addEventListener('click', onGuessClick));
+  renderControls();
+}
+
+/* ============================================================
+   猜牌点击
+   ============================================================ */
+function onGuessClick(e) {
+  if (state !== 'guessing') return;
+  const el = e.currentTarget;
+  if (el.classList.contains('wrong')) return;
+
+  const deckIdx = Number(el.dataset.deckIdx);
+
+  if (deckIdx === TARGET_INDEX) {
+    state = 'done';
+    el.classList.add('correct');
+    cardEls.forEach(c => {
+      c.style.pointerEvents = 'none';
+      c.removeEventListener('click', onGuessClick);
+    });
+    setStatus('🎉 猜中！观众抽到的正是 —— 黑桃 K ♠');
+    renderControls();
+  } else {
+    el.classList.add('wrong');
+    setStatus('❌ 不是这张，再想想……');
+  }
+}
+
+/* ============================================================
+   重置
+   ============================================================ */
+function reset() {
+  state = 'idle';
+  aPickedEl = null;
+  const order = DECK.map((_, i) => i);
+  renderTable(order, false);
+  cardEls.forEach(el => {
+    el.classList.remove('flipped', 'picked', 'correct', 'wrong');
+    el.style.transform = '';
+    el.style.transition = '';
+    el.style.pointerEvents = '';
+  });
+  setStep(0);
+  setModeTag('A');
+  setStatus('点击下方「洗牌」开始');
+  renderControls();
+}
+
+/* ============================================================
+   模式标签快捷操作
+   ============================================================ */
+tagA.addEventListener('click', () => {
+  if (state === 'idle' || state === 'shuffling') return;
+  reset();
+});
+tagB.addEventListener('click', () => {
+  if (state !== 'shuffled' && state !== 'showingA') return;
+  if (aPickedEl) aPickedEl.classList.remove('flipped', 'picked');
+  aPickedEl = null;
+  cardEls.forEach(el => el.classList.remove('flipped', 'picked'));
+  state = 'readyB';
+  setStep(3);
+  setModeTag('B');
+  setStatus('B模式 · 点击「抽」，从牌堆中抽出黑桃K（牌面隐藏）');
+  renderControls();
+});
+
+/* ============================================================
+   启动：标题 + 牌桌 + 功能按键常驻；说明性文字默认隐藏
+   ============================================================ */
+reset();
+setTextVisible(false);
+</script>
+</body>
+</html>
